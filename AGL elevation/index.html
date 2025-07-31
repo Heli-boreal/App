@@ -5,16 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Altitude AGL Temps Réel</title>
   <style>
-    body { font-family: sans-serif; background: #111; color: #00f; text-align: center; padding: 1em; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; }
-    #agl { font-size: 5.25em; color: #0f0; animation: flash 1s infinite alternate; }
-    #asl, #terrain { font-size: 1em; margin-top: 1em; color: #00f; }
-    @keyframes flash {
-      from { opacity: 1; }
-      to { opacity: 0.5; }
+    body { font-family: sans-serif; background: #111; color: #00f; text-align: center; padding: 1em; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; transition: background 0.5s, color 0.5s; }
+    #themeToggle {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: #fff;
+      color: #000;
+      border: none;
+      padding: 10px 15px;
+      font-size: 1em;
+      cursor: pointer;
+      z-index: 1000;
     }
+    #agl { font-size: 5.25em; color: #0f0; }
+    #asl, #terrain { font-size: 1em; margin-top: 1em; color: #00f; }
+    .light-mode { background: #fff; color: #000; }
+    .light-mode #agl { color: #000; }
+    .light-mode #asl, .light-mode #terrain { color: #333; }
   </style>
 </head>
 <body>
+  <button id="themeToggle">Mode clair</button>
   <div id="agl">AGL: -- m</div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
@@ -69,6 +81,35 @@
 
     // Démarre la capture GPS
     watchPosition();
+
+    // Gestion du thème
+    const toggleBtn = document.getElementById('themeToggle');
+    toggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('light-mode');
+      toggleBtn.textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
+    });
+
+    // Empêche la mise en veille (Wake Lock API)
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            console.log('Wake Lock was released');
+          });
+          console.log('Wake Lock is active');
+        }
+      } catch (err) {
+        console.error(`${err.name}, ${err.message}`);
+      }
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (wakeLock !== null && document.visibilityState === "visible") {
+        requestWakeLock();
+      }
+    });
+    requestWakeLock();
   </script>
 </body>
 </html>
