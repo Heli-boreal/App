@@ -5,17 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Altitude AGL Temps Réel</title>
   <style>
-    body { font-family: sans-serif; background: #111; color: #0f0; text-align: center; padding: 2em; }
-    h1 { font-size: 1.8em; }
-    .data { font-size: 2.5em; margin: 1em 0; }
+    body { font-family: sans-serif; background: #111; color: #0f0; text-align: center; padding: 1em; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; }
+    #agl { font-size: 7.5em; color: #00f; animation: flash 1s infinite alternate; }
+    #asl, #terrain { font-size: 1em; margin-top: 1em; color: #0f0; }
+    @keyframes flash {
+      from { opacity: 1; }
+      to { opacity: 0.5; }
+    }
   </style>
 </head>
 <body>
-  <h1>Altitude AGL (Approx.)</h1>
-  <div class="data" id="agl">AGL: -- m</div>
-  <div class="data" id="asl">GPS Altitude: -- m</div>
-  <div class="data" id="terrain">Sol: -- m</div>
+  <div id="agl">AGL: -- m</div>
+  <div id="asl">GPS Altitude: -- m</div>
+  <div id="terrain">Sol: -- m</div>
   <script>
+    let lastTerrain = null;
+    let lastTerrainTime = 0;
+    let asl = null;
+
     async function getElevation(lat, lon) {
       const url = `https://corsproxy.io/?https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`;
       try {
@@ -28,31 +35,40 @@
       }
     }
 
-    function updateDisplay(asl, terrain) {
+    function updateDisplay() {
       document.getElementById("asl").textContent = `GPS Altitude: ${asl?.toFixed(1) ?? '--'} m`;
-      document.getElementById("terrain").textContent = `Sol: ${terrain?.toFixed(1) ?? '--'} m`;
-      if (asl !== null && terrain !== null) {
-        document.getElementById("agl").textContent = `AGL: ${(asl - terrain).toFixed(1)} m`;
+      document.getElementById("terrain").textContent = `Sol: ${lastTerrain?.toFixed(1) ?? '--'} m`;
+      if (asl !== null && lastTerrain !== null) {
+        document.getElementById("agl").textContent = `AGL: ${(asl - lastTerrain).toFixed(1)} m`;
       } else {
         document.getElementById("agl").textContent = `AGL: -- m`;
       }
     }
 
-    async function getAndDisplay() {
-      navigator.geolocation.getCurrentPosition(async pos => {
+    function watchPosition() {
+      navigator.geolocation.watchPosition(async pos => {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
-        const asl = pos.coords.altitude ?? null;
+        asl = pos.coords.altitude ?? null;
 
-        const terrain = await getElevation(lat, lon);
-        updateDisplay(asl, terrain);
+        const now = Date.now();
+        if (!lastTerrain || now - lastTerrainTime > 5000) {
+          const terrain = await getElevation(lat, lon);
+          if (terrain !== null) {
+            lastTerrain = terrain;
+            lastTerrainTime = now;
+          }
+        }
       }, err => {
         console.error("Erreur GPS:", err);
-        updateDisplay(null, null);
-      }, { enableHighAccuracy: true });
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
     }
 
-    setInterval(getAndDisplay, 1500); // refresh every 1.5 seconds
+    // Mise à jour de l'affichage toutes les 250 ms
+    setInterval(updateDisplay, 250);
+
+    // Démarre la capture GPS
+    watchPosition();
   </script>
 </body>
 </html>
