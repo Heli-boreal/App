@@ -17,7 +17,7 @@
   <div class="data" id="terrain">Sol: -- m</div>
   <script>
     async function getElevation(lat, lon) {
-      const url = `https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`;
+      const url = `https://corsproxy.io/?https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`;
       try {
         const res = await fetch(url);
         const json = await res.json();
@@ -52,7 +52,7 @@
       }, { enableHighAccuracy: true });
     }
 
-    setInterval(getAndDisplay, 3000); // refresh every 3 seconds
+    setInterval(getAndDisplay, 1500); // refresh every 1.5 seconds
   </script>
 </body>
 </html>
