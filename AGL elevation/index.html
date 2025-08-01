@@ -66,7 +66,144 @@
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
   <script>
-    // (Le script JavaScript reste inchangé ici)
+    let lastTerrain = null;
+    let lastTerrainTime = 0;
+    let asl = null;
+    let lat = null;
+    let lon = null;
+    let useOffline = false;
+    let offlineData = null;
+    let recording = false;
+    let recordedPoints = [];
+
+    async function loadOfflineData() {
+      const res = await fetch("elevation_lac_labrie_30m.json");
+      const json = await res.json();
+      offlineData = json.data;
+    }
+
+    function getOfflineElevation(lat, lon) {
+      if (!offlineData) return null;
+
+      // Interpolation bilinéaire
+      const latFloor = Math.floor(lat * 100000) / 100000;
+      const lonFloor = Math.floor(lon * 100000) / 100000;
+      const latCeil = latFloor + 0.00001;
+      const lonCeil = lonFloor + 0.00001;
+
+      let q11, q21, q12, q22;
+      for (const pt of offlineData) {
+        if (pt.lat === latFloor && pt.lon === lonFloor) q11 = pt;
+        if (pt.lat === latCeil && pt.lon === lonFloor) q21 = pt;
+        if (pt.lat === latFloor && pt.lon === lonCeil) q12 = pt;
+        if (pt.lat === latCeil && pt.lon === lonCeil) q22 = pt;
+      }
+      if (!(q11 && q21 && q12 && q22)) return null;
+
+      const x = (lon - lonFloor) / (lonCeil - lonFloor);
+      const y = (lat - latFloor) / (latCeil - latFloor);
+
+      const r1 = q11.elevation * (1 - x) + q12.elevation * x;
+      const r2 = q21.elevation * (1 - x) + q22.elevation * x;
+      return r1 * (1 - y) + r2 * y;
+    }
+
+    async function updateTerrain(lat, lon) {
+      if (useOffline) {
+        lastTerrain = getOfflineElevation(lat, lon);
+      } else {
+        try {
+          const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`);
+          const json = await res.json();
+          lastTerrain = json.results[0].elevation;
+        } catch (e) {
+          console.error("Erreur fetch SRTM:", e);
+        }
+      }
+      lastTerrainTime = Date.now();
+      updateDisplay();
+    }
+
+    function updateDisplay() {
+      document.getElementById("asl").textContent = `GPS Altitude: ${asl?.toFixed(1) ?? '--'} m`;
+      document.getElementById("terrain").textContent = `Sol: ${lastTerrain?.toFixed(1) ?? '--'} m`;
+      if (asl !== null && lastTerrain !== null) {
+        const agl = asl - lastTerrain;
+        document.getElementById("agl-value").textContent = agl.toFixed(1);
+        if (recording) {
+          recordedPoints.push({ time: new Date().toISOString(), lat, lon, alt: asl });
+        }
+      } else {
+        document.getElementById("agl-value").textContent = `--`;
+      }
+    }
+
+    function watchPosition() {
+      navigator.geolocation.watchPosition(pos => {
+        lat = pos.coords.latitude;
+        lon = pos.coords.longitude;
+        asl = pos.coords.altitude ?? null;
+        updateTerrain(lat, lon);
+      }, err => {
+        console.error("Erreur GPS:", err);
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+    }
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      document.body.classList.toggle('light-mode');
+      document.getElementById('themeToggle').textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
+    });
+
+    document.getElementById('sourceToggle').addEventListener('click', () => {
+      useOffline = !useOffline;
+      document.getElementById('sourceToggle').textContent = `Source: ${useOffline ? 'Hors ligne' : 'En ligne'}`;
+      if (lat && lon) updateTerrain(lat, lon);
+    });
+
+    document.getElementById('recordToggle').addEventListener('click', () => {
+      recording = !recording;
+      const btn = document.getElementById('recordToggle');
+      btn.classList.toggle('recording', recording);
+      btn.textContent = recording ? 'Arrêter' : 'Enregistrer';
+      if (!recording && recordedPoints.length) {
+        const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>Tracé AGL</name>\n<Placemark><LineString><altitudeMode>absolute</altitudeMode><coordinates>\n` +
+          recordedPoints.map(p => `${p.lon},${p.lat},${p.alt}`).join(" ") +
+          `\n</coordinates></LineString></Placemark>\n</Document></kml>`;
+        const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'trace.kml';
+        a.click();
+        URL.revokeObjectURL(url);
+        recordedPoints = [];
+      }
+    });
+
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            console.log('Wake Lock was released');
+          });
+          console.log('Wake Lock is active');
+        }
+      } catch (err) {
+        console.error(`${err.name}, ${err.message}`);
+      }
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (wakeLock !== null && document.visibilityState === "visible") {
+        requestWakeLock();
+      }
+    });
+
+    setInterval(updateDisplay, 1500);
+    loadOfflineData();
+    watchPosition();
+    requestWakeLock();
   </script>
 </body>
 </html>
