@@ -1,4 +1,4 @@
-<!-- VERSION : Point 3 avec toggle source CORRIGÉ -->
+<!-- VERSION : Point 3 avec anticipation 2s -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -70,8 +70,6 @@
   <script>
     let isLight = false;
     let useOffline = true;
-    let elevationData = [];
-
     const toggle = document.getElementById('themeToggle');
     toggle.addEventListener('click', () => {
       isLight = !isLight;
@@ -88,8 +86,8 @@
     fetch('elevation_lac_labrie_30m.json')
       .then(res => res.json())
       .then(data => {
-        elevationData = data.data || data;
-        console.log("Données chargées:", elevationData.length);
+        window.elevationData = data;
+        console.log("Données chargées:", data.length);
       });
 
     const recordButton = document.getElementById('recordToggle');
@@ -112,16 +110,32 @@
       }
     });
 
+    let lastLat = null, lastLon = null, lastTime = null;
+
     function updatePosition(position) {
       const lat = position.coords.latitude;
       const lon = position.coords.longitude;
       const alt = position.coords.altitude || 0;
+      const now = Date.now();
+
+      let predictedLat = lat;
+      let predictedLon = lon;
+
+      if (lastLat !== null && lastLon !== null && lastTime !== null) {
+        const dt = (now - lastTime) / 1000;
+        const dLat = lat - lastLat;
+        const dLon = lon - lastLon;
+        const speedLat = dLat / dt;
+        const speedLon = dLon / dt;
+        predictedLat = lat + speedLat * 2;
+        predictedLon = lon + speedLon * 2;
+      }
 
       if (useOffline) {
-        const ground = findElevation(lat, lon);
+        const ground = findElevation(predictedLat, predictedLon);
         updateDisplay(lat, lon, alt, ground);
       } else {
-        fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`)
+        fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon}`)
           .then(res => res.json())
           .then(json => {
             const ground = json.results[0].elevation;
@@ -132,6 +146,10 @@
             updateDisplay(lat, lon, alt, 0);
           });
       }
+
+      lastLat = lat;
+      lastLon = lon;
+      lastTime = now;
     }
 
     function updateDisplay(lat, lon, alt, ground) {
@@ -145,10 +163,10 @@
     }
 
     function findElevation(lat, lon) {
-      if (!elevationData || elevationData.length === 0) return 0;
+      if (!window.elevationData) return 0;
       let closest = null;
       let minDist = Infinity;
-      for (const pt of elevationData) {
+      for (const pt of window.elevationData) {
         const d = (pt.lat - lat) ** 2 + (pt.lon - lon) ** 2;
         if (d < minDist) {
           minDist = d;
