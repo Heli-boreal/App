@@ -1,4 +1,4 @@
-<!-- VERSION : POINT 3 (test avec fichier Lac Labrie) -->
+<!-- VERSION : POINT 3 (restauré, Lac Labrie en source directe) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -19,7 +19,7 @@
       height: 100vh;
       transition: background 0.5s, color 0.5s;
     }
-    #themeToggle, #sourceToggle, #recordToggle {
+    #themeToggle, #recordToggle {
       position: absolute;
       background: #fff;
       color: #000;
@@ -31,7 +31,6 @@
       border-radius: 10px;
     }
     #themeToggle { top: 10px; left: 10px; }
-    #sourceToggle { top: 10px; right: 10px; }
     #recordToggle { bottom: 10px; left: 10px; }
     #recordToggle.recording { background: red; color: #fff; }
     #agl {
@@ -61,18 +60,25 @@
 </head>
 <body>
   <button id="themeToggle">Mode clair</button>
-  <button id="sourceToggle">Source: Hors ligne</button>
   <button id="recordToggle">Enregistrer</button>
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
   <script>
-    // Chargement du fichier Lac Labrie uniquement
+    let isLight = false;
+    const toggle = document.getElementById('themeToggle');
+    toggle.addEventListener('click', () => {
+      isLight = !isLight;
+      document.body.classList.toggle('light-mode', isLight);
+      toggle.textContent = isLight ? 'Mode sombre' : 'Mode clair';
+    });
+
+    // Chargement de la source terrain Lac Labrie uniquement
     fetch('elevation_lac_labrie_30m.json')
       .then(res => res.json())
       .then(data => {
         window.elevationData = data;
-        console.log("Données Lac Labrie chargées", data.length);
+        console.log("Données Lac Labrie chargées:", data.length);
       });
   </script>
 </body>
