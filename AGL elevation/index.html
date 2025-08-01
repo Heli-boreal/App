@@ -21,7 +21,7 @@
     #recordButton { right: 10px; }
     #sourceToggle { left: 140px; }
     #agl { font-size: 5.25em; color: #0f0; }
-    #agl small { font-size: 0.3em; vertical-align: super; }
+    #agl small { font-size: 0.2em; vertical-align: super; }
     #asl, #terrain { font-size: 1em; margin-top: 1em; color: #00f; }
     .light-mode { background: #fff; color: #000; }
     .light-mode #agl { color: #000; }
@@ -62,17 +62,40 @@
 
     function getInterpolatedElevation(lat, lon) {
       if (terrainGrid.length === 0) return null;
-      let nearest = terrainGrid.reduce((a, b) => {
-        let da = (lat - a.lat)**2 + (lon - a.lon)**2;
-        let db = (lat - b.lat)**2 + (lon - b.lon)**2;
-        return da < db ? a : b;
-      });
-      return nearest.elevation;
+
+      // Trouver les quatre coins les plus proches pour interpolation bilinéaire
+      const step = 0.00027; // ~30m en degrés
+      const lat1 = Math.floor(lat / step) * step;
+      const lat2 = lat1 + step;
+      const lon1 = Math.floor(lon / step) * step;
+      const lon2 = lon1 + step;
+
+      const getElev = (la, lo) => {
+        let closest = terrainGrid.reduce((a, b) => {
+          let da = (la - a.lat)**2 + (lo - a.lon)**2;
+          let db = (la - b.lat)**2 + (lo - b.lon)**2;
+          return da < db ? a : b;
+        });
+        return closest.elevation;
+      };
+
+      const Q11 = getElev(lat1, lon1);
+      const Q12 = getElev(lat1, lon2);
+      const Q21 = getElev(lat2, lon1);
+      const Q22 = getElev(lat2, lon2);
+
+      const f = (x, x1, x2, q1, q2) => q1 + (q2 - q1) * ((x - x1) / (x2 - x1));
+
+      const R1 = f(lon, lon1, lon2, Q11, Q12);
+      const R2 = f(lon, lon1, lon2, Q21, Q22);
+      const P = f(lat, lat1, lat2, R1, R2);
+
+      return P;
     }
 
     async function getOnlineElevation(lat, lon) {
       try {
-        const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`);
+        const res = await fetch(`https://api.opentopodata.org/v1/srtm30m?locations=${lat},${lon}`);
         const json = await res.json();
         return json.results[0].elevation;
       } catch (err) {
@@ -187,3 +210,4 @@
   </script>
 </body>
 </html>
+
