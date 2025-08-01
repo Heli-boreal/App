@@ -1,4 +1,4 @@
-<!-- VERSION : Point 4 avec anticipation 2s corrigée -->
+<!-- VERSION : Point 4 avec anticipation 2s corrigée et bug résolu -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -83,11 +83,12 @@
       sourceToggle.textContent = useOffline ? 'Source: Hors ligne' : 'Source: En ligne';
     });
 
+    let elevationData = null;
     fetch('elevation_lac_labrie_30m.json')
       .then(res => res.json())
       .then(data => {
-        window.elevationData = data;
-        console.log("Données chargées:", data.length);
+        elevationData = data;
+        console.log("Données chargées:", elevationData.length);
       });
 
     const recordButton = document.getElementById('recordToggle');
@@ -123,24 +124,24 @@
 
       if (lastLat !== null && lastLon !== null && lastTime !== null) {
         const dt = (now - lastTime) / 1000;
-        const dLat = lat - lastLat;
-        const dLon = lon - lastLon;
-        const speedLat = dLat / dt;
-        const speedLon = dLon / dt;
-        predictedLat = lat + speedLat * 2;
-        predictedLon = lon + speedLon * 2;
+        if (dt > 0) {
+          const dLat = lat - lastLat;
+          const dLon = lon - lastLon;
+          const speedLat = dLat / dt;
+          const speedLon = dLon / dt;
+          predictedLat = lat + speedLat * 2;
+          predictedLon = lon + speedLon * 2;
+        }
       }
 
-      const handleGround = (ground) => updateDisplay(lat, lon, alt, ground);
+      function handleGround(ground) {
+        updateDisplay(lat, lon, alt, ground);
+      }
 
-      if (useOffline) {
-        if (window.elevationData) {
-          const ground = findElevation(predictedLat, predictedLon);
-          handleGround(ground);
-        } else {
-          console.warn("Les données d'élévation ne sont pas encore chargées.");
-        }
-      } else {
+      if (useOffline && elevationData) {
+        const ground = findElevation(predictedLat, predictedLon);
+        handleGround(ground);
+      } else if (!useOffline) {
         fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon}`)
           .then(res => res.json())
           .then(json => handleGround(json.results[0].elevation))
@@ -166,10 +167,10 @@
     }
 
     function findElevation(lat, lon) {
-      if (!window.elevationData) return 0;
+      if (!elevationData || !elevationData.length) return 0;
       let closest = null;
       let minDist = Infinity;
-      for (const pt of window.elevationData) {
+      for (const pt of elevationData) {
         const d = (pt.lat - lat) ** 2 + (pt.lon - lon) ** 2;
         if (d < minDist) {
           minDist = d;
