@@ -1,4 +1,4 @@
-<!-- VERSION : Point 2 -->
+<!-- VERSION : Point 3 avec toggle source -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -19,7 +19,7 @@
       height: 100vh;
       transition: background 0.5s, color 0.5s;
     }
-    #themeToggle, #recordToggle {
+    #themeToggle, #recordToggle, #sourceToggle {
       position: absolute;
       background: #fff;
       color: #000;
@@ -31,6 +31,7 @@
       border-radius: 10px;
     }
     #themeToggle { top: 10px; left: 10px; }
+    #sourceToggle { top: 10px; right: 10px; }
     #recordToggle { bottom: 10px; left: 10px; }
     #recordToggle.recording { background: red; color: #fff; }
     #agl {
@@ -60,6 +61,7 @@
 </head>
 <body>
   <button id="themeToggle">Mode clair</button>
+  <button id="sourceToggle">Source: Hors ligne</button>
   <button id="recordToggle">Enregistrer</button>
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
   <div id="asl">GPS Altitude: -- m</div>
@@ -67,11 +69,18 @@
 
   <script>
     let isLight = false;
+    let useOffline = true;
     const toggle = document.getElementById('themeToggle');
     toggle.addEventListener('click', () => {
       isLight = !isLight;
       document.body.classList.toggle('light-mode', isLight);
       toggle.textContent = isLight ? 'Mode sombre' : 'Mode clair';
+    });
+
+    const sourceToggle = document.getElementById('sourceToggle');
+    sourceToggle.addEventListener('click', () => {
+      useOffline = !useOffline;
+      sourceToggle.textContent = useOffline ? 'Source: Hors ligne' : 'Source: En ligne';
     });
 
     fetch('elevation_lac_labrie_30m.json')
@@ -105,7 +114,25 @@
       const lat = position.coords.latitude;
       const lon = position.coords.longitude;
       const alt = position.coords.altitude || 0;
-      const ground = findElevation(lat, lon);
+
+      if (useOffline) {
+        const ground = findElevation(lat, lon);
+        updateDisplay(lat, lon, alt, ground);
+      } else {
+        fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`)
+          .then(res => res.json())
+          .then(json => {
+            const ground = json.results[0].elevation;
+            updateDisplay(lat, lon, alt, ground);
+          })
+          .catch(err => {
+            console.error("Erreur SRTM:", err);
+            updateDisplay(lat, lon, alt, 0);
+          });
+      }
+    }
+
+    function updateDisplay(lat, lon, alt, ground) {
       const agl = (alt - ground).toFixed(1);
       document.getElementById('agl-value').textContent = isNaN(agl) ? '--' : agl;
       document.getElementById('asl').textContent = `GPS Altitude: ${alt.toFixed(1)} m`;
