@@ -1,34 +1,30 @@
-<!-- VERSION : Point 6 avec anticipation 2s et interpolation bilinéaire + format amélioré, adapté iPhone horizontal -->
+<!-- VERSION : Point 6 avec anticipation 2s et interpolation bilinéaire + format amélioré -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Altitude AGL Temps Réel</title>
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
+    body {
+      font-family: sans-serif;
       background: #111;
       color: #00f;
-      font-family: sans-serif;
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
-    }
-    body {
+      text-align: center;
+      padding: 1em;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      position: relative;
+      height: 100vh;
+      transition: background 0.5s, color 0.5s;
     }
     #themeToggle, #recordToggle, #sourceToggle {
       position: absolute;
       background: #fff;
       color: #000;
       border: none;
-      padding: 8px 12px;
+      padding: 10px 15px;
       font-size: 1em;
       cursor: pointer;
       z-index: 1000;
@@ -51,18 +47,12 @@
       margin: 0 5px;
     }
     #agl-value {
-      font-size: 5em;
+      font-size: 4em;
       margin: 0 5px;
-    }
-    .altitudes {
-      display: flex;
-      flex-direction: row;
-      justify-content: center;
-      gap: 25px;
-      margin-top: 10px;
     }
     #asl, #terrain {
       font-size: 1em;
+      margin-top: 1em;
       color: #00f;
     }
     .light-mode {
@@ -80,8 +70,6 @@
       bottom: 5px;
       font-size: 0.6em;
       color: #666;
-      text-align: center;
-      width: 100%;
     }
   </style>
 </head>
@@ -90,14 +78,153 @@
   <button id="sourceToggle">Source: Hors ligne</button>
   <button id="recordToggle">Enregistrer</button>
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
-  <div class="altitudes">
-    <div id="asl">GPS Altitude: -- m</div>
-    <div id="terrain">Sol: -- m</div>
-  </div>
+  <div id="asl">GPS Altitude: -- m</div>
+  <div id="terrain">Sol: -- m</div>
   <div id="footer">Activer position =&gt; réglages/confidentialité/service de localisation/site web safari.</div>
 
   <script>
-    // (le script reste inchangé ici)
+    let useOffline = true;
+    let recording = false;
+    let recordedPoints = [];
+    let asl = null;
+    let lat = null;
+    let lon = null;
+    let lastTerrain = null;
+    let lastTerrainTime = 0;
+    let lastLat = null;
+    let lastLon = null;
+    let lastTime = null;
+
+    async function loadOfflineData() {
+      const res = await fetch("elevation_lac_labrie_30m.json");
+      return (await res.json()).data;
+    }
+
+    let offlineData = [];
+    loadOfflineData().then(data => offlineData = data);
+
+    function bilinearInterpolation(x, y, data) {
+      const closest = data.filter(p => Math.abs(p.lat - x) <= 0.0005 && Math.abs(p.lon - y) <= 0.0005);
+      if (closest.length < 4) return null;
+      closest.sort((a, b) => Math.hypot(a.lat - x, a.lon - y) - Math.hypot(b.lat - x, b.lon - y));
+      return closest[0].elevation;
+    }
+
+    async function updateTerrain(predictedLat, predictedLon) {
+      if (useOffline) {
+        lastTerrain = bilinearInterpolation(predictedLat, predictedLon, offlineData);
+      } else {
+        try {
+          const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon}`);
+          const json = await res.json();
+          lastTerrain = json.results[0].elevation;
+        } catch (e) {
+          console.error("Erreur fetch SRTM:", e);
+          lastTerrain = null;
+        }
+      }
+      lastTerrainTime = Date.now();
+    }
+
+    function updateDisplay() {
+      document.getElementById("asl").textContent = `GPS Altitude: ${asl?.toFixed(1) ?? '--'} m`;
+      document.getElementById("terrain").textContent = `Sol: ${lastTerrain?.toFixed(1) ?? '--'} m`;
+      if (asl !== null && lastTerrain !== null) {
+        const agl = asl - lastTerrain;
+        document.getElementById("agl-value").textContent = agl.toFixed(1);
+        if (recording) {
+          recordedPoints.push({ time: new Date().toISOString(), lat, lon, alt: asl });
+        }
+      } else {
+        document.getElementById("agl-value").textContent = `--`;
+      }
+    }
+
+    function watchPosition() {
+      navigator.geolocation.watchPosition(pos => {
+        const newLat = pos.coords.latitude;
+        const newLon = pos.coords.longitude;
+        const newTime = Date.now();
+        asl = pos.coords.altitude ?? null;
+
+        if (lastLat !== null && lastLon !== null && lastTime !== null) {
+          const dt = (newTime - lastTime) / 1000;
+          const dLat = newLat - lastLat;
+          const dLon = newLon - lastLon;
+          const speedLat = dLat / dt;
+          const speedLon = dLon / dt;
+
+          const predictedLat = newLat + speedLat * 2;
+          const predictedLon = newLon + speedLon * 2;
+          updateTerrain(predictedLat, predictedLon);
+        } else {
+          updateTerrain(newLat, newLon);
+        }
+
+        lat = newLat;
+        lon = newLon;
+        lastLat = newLat;
+        lastLon = newLon;
+        lastTime = newTime;
+      }, err => {
+        console.error("Erreur GPS:", err);
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+    }
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      document.body.classList.toggle('light-mode');
+      document.getElementById('themeToggle').textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
+    });
+
+    document.getElementById('sourceToggle').addEventListener('click', () => {
+      useOffline = !useOffline;
+      document.getElementById('sourceToggle').textContent = `Source: ${useOffline ? 'Hors ligne' : 'En ligne'}`;
+      if (lat && lon) updateTerrain(lat, lon);
+    });
+
+    document.getElementById('recordToggle').addEventListener('click', () => {
+      recording = !recording;
+      const btn = document.getElementById('recordToggle');
+      btn.classList.toggle('recording', recording);
+      btn.textContent = recording ? 'Arrêter' : 'Enregistrer';
+      if (!recording && recordedPoints.length) {
+        const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>Tracé AGL</name>\n<Placemark><LineString><altitudeMode>absolute</altitudeMode><coordinates>\n` +
+          recordedPoints.map(p => `${p.lon},${p.lat},${p.alt}`).join(" ") +
+          `\n</coordinates></LineString></Placemark>\n</Document></kml>`;
+        const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'trace.kml';
+        a.click();
+        URL.revokeObjectURL(url);
+        recordedPoints = [];
+      }
+    });
+
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            console.log('Wake Lock was released');
+          });
+          console.log('Wake Lock is active');
+        }
+      } catch (err) {
+        console.error(`${err.name}, ${err.message}`);
+      }
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (wakeLock !== null && document.visibilityState === "visible") {
+        requestWakeLock();
+      }
+    });
+
+    setInterval(updateDisplay, 1500);
+    watchPosition();
+    requestWakeLock();
   </script>
 </body>
 </html>
