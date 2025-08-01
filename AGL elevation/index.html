@@ -1,3 +1,4 @@
+<!-- VERSION : Point 2 -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -18,7 +19,7 @@
       height: 100vh;
       transition: background 0.5s, color 0.5s;
     }
-    #themeToggle, #sourceToggle, #recordToggle {
+    #themeToggle, #recordToggle {
       position: absolute;
       background: #fff;
       color: #000;
@@ -30,7 +31,6 @@
       border-radius: 10px;
     }
     #themeToggle { top: 10px; left: 10px; }
-    #sourceToggle { top: 10px; right: 10px; }
     #recordToggle { bottom: 10px; left: 10px; }
     #recordToggle.recording { background: red; color: #fff; }
     #agl {
@@ -60,108 +60,36 @@
 </head>
 <body>
   <button id="themeToggle">Mode clair</button>
-  <button id="sourceToggle">Source: En ligne</button>
   <button id="recordToggle">Enregistrer</button>
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
+
   <script>
-    let useOffline = false;
-    let recording = false;
+    let isLight = false;
+    const toggle = document.getElementById('themeToggle');
+    toggle.addEventListener('click', () => {
+      isLight = !isLight;
+      document.body.classList.toggle('light-mode', isLight);
+      toggle.textContent = isLight ? 'Mode sombre' : 'Mode clair';
+    });
+
+    fetch('elevation_lac_labrie_30m.json')
+      .then(res => res.json())
+      .then(data => {
+        window.elevationData = data;
+        console.log("Données chargées:", data.length);
+      });
+
+    const recordButton = document.getElementById('recordToggle');
+    let isRecording = false;
     let recordedPoints = [];
-    let asl = null;
-    let lat = null;
-    let lon = null;
-    let lastTerrain = null;
-    let lastTerrainTime = 0;
-    let lastLat = null;
-    let lastLon = null;
-    let lastTime = null;
-
-    async function updateTerrain(predictedLat, predictedLon) {
-      if (useOffline) {
-        const res = await fetch("elevation_lac_labrie_30m.json");
-        const json = await res.json();
-        const pt = json.data.find(p => Math.abs(p.lat - predictedLat) < 0.0001 && Math.abs(p.lon - predictedLon) < 0.0001);
-        lastTerrain = pt ? pt.elevation : null;
-      } else {
-        try {
-          const res = await fetch(https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon});
-          const json = await res.json();
-          lastTerrain = json.results[0].elevation;
-        } catch (e) {
-          console.error("Erreur fetch SRTM:", e);
-          lastTerrain = null;
-        }
-      }
-      lastTerrainTime = Date.now();
-    }
-
-    function updateDisplay() {
-      document.getElementById("asl").textContent = GPS Altitude: ${asl?.toFixed(1) ?? '--'} m;
-      document.getElementById("terrain").textContent = Sol: ${lastTerrain?.toFixed(1) ?? '--'} m;
-      if (asl !== null && lastTerrain !== null) {
-        const agl = asl - lastTerrain;
-        document.getElementById("agl-value").textContent = agl.toFixed(1);
-        if (recording) {
-          recordedPoints.push({ time: new Date().toISOString(), lat, lon, alt: asl });
-        }
-      } else {
-        document.getElementById("agl-value").textContent = --;
-      }
-    }
-
-    function watchPosition() {
-      navigator.geolocation.watchPosition(pos => {
-        const newLat = pos.coords.latitude;
-        const newLon = pos.coords.longitude;
-        const newTime = Date.now();
-        asl = pos.coords.altitude ?? null;
-
-        if (lastLat !== null && lastLon !== null && lastTime !== null) {
-          const dt = (newTime - lastTime) / 1000;
-          const dLat = newLat - lastLat;
-          const dLon = newLon - lastLon;
-          const speedLat = dLat / dt;
-          const speedLon = dLon / dt;
-
-          const predictedLat = newLat + speedLat * 2;
-          const predictedLon = newLon + speedLon * 2;
-          updateTerrain(predictedLat, predictedLon);
-        } else {
-          updateTerrain(newLat, newLon);
-        }
-
-        lat = newLat;
-        lon = newLon;
-        lastLat = newLat;
-        lastLon = newLon;
-        lastTime = newTime;
-      }, err => {
-        console.error("Erreur GPS:", err);
-      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
-    }
-
-    document.getElementById('themeToggle').addEventListener('click', () => {
-      document.body.classList.toggle('light-mode');
-      document.getElementById('themeToggle').textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
-    });
-
-    document.getElementById('sourceToggle').addEventListener('click', () => {
-      useOffline = !useOffline;
-      document.getElementById('sourceToggle').textContent = Source: ${useOffline ? 'Hors ligne' : 'En ligne'};
-      if (lat && lon) updateTerrain(lat, lon);
-    });
-
-    document.getElementById('recordToggle').addEventListener('click', () => {
-      recording = !recording;
-      const btn = document.getElementById('recordToggle');
-      btn.classList.toggle('recording', recording);
-      btn.textContent = recording ? 'Arrêter' : 'Enregistrer';
-      if (!recording && recordedPoints.length) {
-        const kml = <?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>Tracé AGL</name>\n<Placemark><LineString><altitudeMode>absolute</altitudeMode><coordinates>\n +
-          recordedPoints.map(p => ${p.lon},${p.lat},${p.alt}).join(" ") +
-          \n</coordinates></LineString></Placemark>\n</Document></kml>;
+    recordButton.addEventListener('click', () => {
+      isRecording = !isRecording;
+      recordButton.classList.toggle('recording', isRecording);
+      recordButton.textContent = isRecording ? 'Enregistrement...' : 'Enregistrer';
+      if (!isRecording && recordedPoints.length) {
+        const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n  <Placemark>\n    <LineString>\n      <coordinates>\n${recordedPoints.map(p => `${p.lon},${p.lat},${p.alt}`).join('\n')}\n      </coordinates>\n    </LineString>\n  </Placemark>\n</Document>\n</kml>`;
         const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -173,29 +101,43 @@
       }
     });
 
-    let wakeLock = null;
-    async function requestWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          wakeLock.addEventListener('release', () => {
-            console.log('Wake Lock was released');
-          });
-          console.log('Wake Lock is active');
-        }
-      } catch (err) {
-        console.error(${err.name}, ${err.message});
+    function updatePosition(position) {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+      const alt = position.coords.altitude || 0;
+      const ground = findElevation(lat, lon);
+      const agl = (alt - ground).toFixed(1);
+      document.getElementById('agl-value').textContent = isNaN(agl) ? '--' : agl;
+      document.getElementById('asl').textContent = `GPS Altitude: ${alt.toFixed(1)} m`;
+      document.getElementById('terrain').textContent = `Sol: ${ground.toFixed(1)} m`;
+      if (isRecording) {
+        recordedPoints.push({ lat, lon, alt });
       }
     }
-    document.addEventListener("visibilitychange", () => {
-      if (wakeLock !== null && document.visibilityState === "visible") {
-        requestWakeLock();
+
+    function findElevation(lat, lon) {
+      if (!window.elevationData) return 0;
+      let closest = null;
+      let minDist = Infinity;
+      for (const pt of window.elevationData) {
+        const d = (pt.lat - lat) ** 2 + (pt.lon - lon) ** 2;
+        if (d < minDist) {
+          minDist = d;
+          closest = pt;
+        }
       }
+      return closest ? closest.elevation : 0;
+    }
+
+    navigator.geolocation.watchPosition(updatePosition, console.error, {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 5000,
     });
 
-    setInterval(updateDisplay, 1500);
-    watchPosition();
-    requestWakeLock();
+    if (navigator.wakeLock) {
+      navigator.wakeLock.request('screen').catch(console.error);
+    }
   </script>
 </body>
 </html>
