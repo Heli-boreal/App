@@ -6,10 +6,9 @@
   <title>Altitude AGL Temps Réel</title>
   <style>
     body { font-family: sans-serif; background: #111; color: #00f; text-align: center; padding: 1em; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; transition: background 0.5s, color 0.5s; }
-    #themeToggle {
+    #themeToggle, #recordButton {
       position: absolute;
       top: 10px;
-      left: 10px;
       background: #fff;
       color: #000;
       border: none;
@@ -18,6 +17,8 @@
       cursor: pointer;
       z-index: 1000;
     }
+    #themeToggle { left: 10px; }
+    #recordButton { right: 10px; }
     #agl { font-size: 5.25em; color: #0f0; }
     #asl, #terrain { font-size: 1em; margin-top: 1em; color: #00f; }
     .light-mode { background: #fff; color: #000; }
@@ -27,6 +28,7 @@
 </head>
 <body>
   <button id="themeToggle">Mode clair</button>
+  <button id="recordButton">Enregistrer</button>
   <div id="agl">AGL: -- m</div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
@@ -34,40 +36,60 @@
     let lastTerrain = null;
     let lastTerrainTime = 0;
     let asl = null;
+    let lat = null;
+    let lon = null;
+    let terrainGrid = [];
+    let recording = false;
+    let recordedData = [];
+    let lastRecordTime = 0;
 
-    async function getElevation(lat, lon) {
-      const url = `https://corsproxy.io/?https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`;
-      try {
-        const res = await fetch(url);
-        const json = await res.json();
-        return json.results[0].elevation;
-      } catch (e) {
-        console.error("Erreur elevation:", e);
-        return null;
-      }
+    const RECORD_INTERVAL_MS = 4000; // 1 point aux ~4 secondes
+
+    fetch("terrain_data_sample_30m.json")
+      .then(res => res.json())
+      .then(data => { terrainGrid = data; })
+      .catch(err => console.error("Erreur chargement terrain:", err));
+
+    function getInterpolatedElevation(lat, lon) {
+      if (terrainGrid.length === 0) return null;
+      let nearest = terrainGrid.reduce((a, b) => {
+        let da = (lat - a.lat)**2 + (lon - a.lon)**2;
+        let db = (lat - b.lat)**2 + (lon - b.lon)**2;
+        return da < db ? a : b;
+      });
+      return nearest.elevation;
     }
 
     function updateDisplay() {
       document.getElementById("asl").textContent = `GPS Altitude: ${asl?.toFixed(1) ?? '--'} m`;
       document.getElementById("terrain").textContent = `Sol: ${lastTerrain?.toFixed(1) ?? '--'} m`;
       if (asl !== null && lastTerrain !== null) {
-        document.getElementById("agl").textContent = `AGL: ${(asl - lastTerrain).toFixed(1)} m`;
+        const agl = asl - lastTerrain;
+        document.getElementById("agl").textContent = `AGL: ${agl.toFixed(1)} m`;
+
+        if (recording) {
+          const now = Date.now();
+          if (now - lastRecordTime > RECORD_INTERVAL_MS) {
+            recordedData.push({ timestamp: now, lat, lon, asl, agl });
+            lastRecordTime = now;
+          }
+        }
       } else {
         document.getElementById("agl").textContent = `AGL: -- m`;
       }
     }
 
     function watchPosition() {
-      navigator.geolocation.watchPosition(async pos => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
+      navigator.geolocation.watchPosition(pos => {
+        lat = pos.coords.latitude;
+        lon = pos.coords.longitude;
         asl = pos.coords.altitude ?? null;
 
         const now = Date.now();
         if (!lastTerrain || now - lastTerrainTime > 5000) {
-          const terrain = await getElevation(lat, lon);
-          if (terrain !== null) {
-            lastTerrain = terrain;
+          const elevation = getInterpolatedElevation(lat, lon);
+          if (elevation !== null) {
+            lastTerrain = elevation;
             lastTerrainTime = now;
           }
         }
@@ -76,20 +98,37 @@
       }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
     }
 
-    // Mise à jour de l'affichage toutes les 250 ms
     setInterval(updateDisplay, 250);
-
-    // Démarre la capture GPS
     watchPosition();
 
-    // Gestion du thème
-    const toggleBtn = document.getElementById('themeToggle');
-    toggleBtn.addEventListener('click', () => {
+    function exportToKML(data) {
+      let kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<Placemark>\n<LineString>\n<altitudeMode>absolute</altitudeMode>\n<coordinates>\n`;
+      kml += data.map(r => `${r.lon},${r.lat},${r.asl}`).join("\n") + "\n";
+      kml += `</coordinates>\n</LineString>\n</Placemark>\n</Document>\n</kml>`;
+      return kml;
+    }
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
       document.body.classList.toggle('light-mode');
-      toggleBtn.textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
+      themeToggle.textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
     });
 
-    // Empêche la mise en veille (Wake Lock API)
+    document.getElementById('recordButton').addEventListener('click', () => {
+      recording = !recording;
+      recordButton.textContent = recording ? "Arrêter" : "Enregistrer";
+      if (!recording && recordedData.length > 0) {
+        const kmlContent = exportToKML(recordedData);
+        const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `AGL-trace-${Date.now()}.kml`;
+        a.click();
+        URL.revokeObjectURL(url);
+        recordedData = [];
+      }
+    });
+
     let wakeLock = null;
     async function requestWakeLock() {
       try {
