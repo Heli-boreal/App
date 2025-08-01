@@ -6,7 +6,7 @@
   <title>Altitude AGL Temps Réel</title>
   <style>
     body { font-family: sans-serif; background: #111; color: #00f; text-align: center; padding: 1em; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; transition: background 0.5s, color 0.5s; }
-    #themeToggle, #recordButton {
+    #themeToggle, #recordButton, #sourceToggle {
       position: absolute;
       top: 10px;
       background: #fff;
@@ -19,7 +19,9 @@
     }
     #themeToggle { left: 10px; }
     #recordButton { right: 10px; }
+    #sourceToggle { left: 140px; }
     #agl { font-size: 5.25em; color: #0f0; }
+    #agl small { font-size: 0.3em; vertical-align: super; }
     #asl, #terrain { font-size: 1em; margin-top: 1em; color: #00f; }
     .light-mode { background: #fff; color: #000; }
     .light-mode #agl { color: #000; }
@@ -29,7 +31,8 @@
 <body>
   <button id="themeToggle">Mode clair</button>
   <button id="recordButton">Enregistrer</button>
-  <div id="agl">AGL: -- m</div>
+  <button id="sourceToggle">Source: Local</button>
+  <div id="agl">AGL: <span id="agl-value">--</span> <small>m</small></div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
   <script>
@@ -42,13 +45,20 @@
     let recording = false;
     let recordedData = [];
     let lastRecordTime = 0;
+    let useOnline = false;
 
-    const RECORD_INTERVAL_MS = 4000; // 1 point aux ~4 secondes
+    const RECORD_INTERVAL_MS = 4000;
 
-    fetch("terrain_data_sample_30m.json")
-      .then(res => res.json())
-      .then(data => { terrainGrid = data; })
-      .catch(err => console.error("Erreur chargement terrain:", err));
+    function loadTerrainData() {
+      if (!useOnline) {
+        fetch("terrain_data_sample_30m.json")
+          .then(res => res.json())
+          .then(data => { terrainGrid = data; })
+          .catch(err => console.error("Erreur chargement terrain local:", err));
+      }
+    }
+
+    loadTerrainData();
 
     function getInterpolatedElevation(lat, lon) {
       if (terrainGrid.length === 0) return null;
@@ -60,12 +70,23 @@
       return nearest.elevation;
     }
 
+    async function getOnlineElevation(lat, lon) {
+      try {
+        const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`);
+        const json = await res.json();
+        return json.results[0].elevation;
+      } catch (err) {
+        console.error("Erreur elevation API:", err);
+        return null;
+      }
+    }
+
     function updateDisplay() {
       document.getElementById("asl").textContent = `GPS Altitude: ${asl?.toFixed(1) ?? '--'} m`;
       document.getElementById("terrain").textContent = `Sol: ${lastTerrain?.toFixed(1) ?? '--'} m`;
       if (asl !== null && lastTerrain !== null) {
         const agl = asl - lastTerrain;
-        document.getElementById("agl").textContent = `AGL: ${agl.toFixed(1)} m`;
+        document.getElementById("agl-value").textContent = agl.toFixed(1);
 
         if (recording) {
           const now = Date.now();
@@ -75,22 +96,30 @@
           }
         }
       } else {
-        document.getElementById("agl").textContent = `AGL: -- m`;
+        document.getElementById("agl-value").textContent = `--`;
       }
     }
 
     function watchPosition() {
-      navigator.geolocation.watchPosition(pos => {
+      navigator.geolocation.watchPosition(async pos => {
         lat = pos.coords.latitude;
         lon = pos.coords.longitude;
         asl = pos.coords.altitude ?? null;
 
         const now = Date.now();
         if (!lastTerrain || now - lastTerrainTime > 5000) {
-          const elevation = getInterpolatedElevation(lat, lon);
-          if (elevation !== null) {
-            lastTerrain = elevation;
-            lastTerrainTime = now;
+          if (useOnline) {
+            const onlineElevation = await getOnlineElevation(lat, lon);
+            if (onlineElevation !== null) {
+              lastTerrain = onlineElevation;
+              lastTerrainTime = now;
+            }
+          } else {
+            const localElevation = getInterpolatedElevation(lat, lon);
+            if (localElevation !== null) {
+              lastTerrain = localElevation;
+              lastTerrainTime = now;
+            }
           }
         }
       }, err => {
@@ -127,6 +156,12 @@
         URL.revokeObjectURL(url);
         recordedData = [];
       }
+    });
+
+    document.getElementById('sourceToggle').addEventListener('click', () => {
+      useOnline = !useOnline;
+      sourceToggle.textContent = `Source: ${useOnline ? 'En ligne' : 'Local'}`;
+      if (!useOnline) loadTerrainData();
     });
 
     let wakeLock = null;
