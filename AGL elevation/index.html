@@ -1,4 +1,4 @@
-<!-- VERSION : Point 3 avec toggle source -->
+<!-- VERSION : Point 3 avec toggle source CORRIGÉ -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -70,6 +70,8 @@
   <script>
     let isLight = false;
     let useOffline = true;
+    let elevationData = [];
+
     const toggle = document.getElementById('themeToggle');
     toggle.addEventListener('click', () => {
       isLight = !isLight;
@@ -86,8 +88,8 @@
     fetch('elevation_lac_labrie_30m.json')
       .then(res => res.json())
       .then(data => {
-        window.elevationData = data;
-        console.log("Données chargées:", data.length);
+        elevationData = data.data || data;
+        console.log("Données chargées:", elevationData.length);
       });
 
     const recordButton = document.getElementById('recordToggle');
@@ -143,10 +145,10 @@
     }
 
     function findElevation(lat, lon) {
-      if (!window.elevationData) return 0;
+      if (!elevationData || elevationData.length === 0) return 0;
       let closest = null;
       let minDist = Infinity;
-      for (const pt of window.elevationData) {
+      for (const pt of elevationData) {
         const d = (pt.lat - lat) ** 2 + (pt.lon - lon) ** 2;
         if (d < minDist) {
           minDist = d;
