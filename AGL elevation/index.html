@@ -85,7 +85,6 @@
     function getOfflineElevation(lat, lon) {
       if (!offlineData) return null;
 
-      // Interpolation bilinéaire
       const latFloor = Math.floor(lat * 100000) / 100000;
       const lonFloor = Math.floor(lon * 100000) / 100000;
       const latCeil = latFloor + 0.00001;
@@ -118,6 +117,7 @@
           lastTerrain = json.results[0].elevation;
         } catch (e) {
           console.error("Erreur fetch SRTM:", e);
+          lastTerrain = null;
         }
       }
       lastTerrainTime = Date.now();
