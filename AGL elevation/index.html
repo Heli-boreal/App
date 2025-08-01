@@ -1,4 +1,4 @@
-<!-- VERSION : POINT 3 (restauré, Lac Labrie en source directe) -->
+<!-- VERSION : POINT 3 (brut original) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -73,12 +73,12 @@
       toggle.textContent = isLight ? 'Mode sombre' : 'Mode clair';
     });
 
-    // Chargement de la source terrain Lac Labrie uniquement
-    fetch('elevation_lac_labrie_30m.json')
+    // Chargement du fichier de référence RECTANGLE COMPLET 30m
+    fetch('elevation_data_full_rectangle.json')
       .then(res => res.json())
       .then(data => {
         window.elevationData = data;
-        console.log("Données Lac Labrie chargées:", data.length);
+        console.log("Données rectangle complet chargées:", data.length);
       });
   </script>
 </body>
