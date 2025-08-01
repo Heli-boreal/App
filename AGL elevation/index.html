@@ -87,7 +87,7 @@
     fetch('elevation_lac_labrie_30m.json')
       .then(res => res.json())
       .then(data => {
-        elevationData = data;
+        elevationData = data.data ?? data; // 🔧 gestion des deux structures possibles
         console.log("Données chargées:", elevationData.length);
       });
 
@@ -138,7 +138,7 @@
         updateDisplay(lat, lon, alt, ground);
       }
 
-      if (useOffline && elevationData) {
+      if (useOffline && elevationData && elevationData.length) {
         const ground = findElevation(predictedLat, predictedLon);
         handleGround(ground);
       } else if (!useOffline) {
@@ -149,6 +149,8 @@
             console.error("Erreur SRTM:", err);
             handleGround(0);
           });
+      } else {
+        handleGround(0);
       }
 
       lastLat = lat;
