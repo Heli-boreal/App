@@ -1,4 +1,4 @@
-<!-- VERSION : Point 4 avec anticipation 2s corrigée et bug résolu -->
+<!-- VERSION : Point 5 avec anticipation 2s et interpolation bilinéaire -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -87,7 +87,7 @@
     fetch('elevation_lac_labrie_30m.json')
       .then(res => res.json())
       .then(data => {
-        elevationData = data.data ?? data; // 🔧 gestion des deux structures possibles
+        elevationData = data.data ?? data;
         console.log("Données chargées:", elevationData.length);
       });
 
@@ -139,7 +139,7 @@
       }
 
       if (useOffline && elevationData && elevationData.length) {
-        const ground = findElevation(predictedLat, predictedLon);
+        const ground = bilinearInterpolation(predictedLat, predictedLon);
         handleGround(ground);
       } else if (!useOffline) {
         fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon}`)
@@ -166,6 +166,30 @@
       if (isRecording) {
         recordedPoints.push({ lat, lon, alt });
       }
+    }
+
+    function bilinearInterpolation(lat, lon) {
+      const points = elevationData.filter(p =>
+        Math.abs(p.lat - lat) <= 0.0005 && Math.abs(p.lon - lon) <= 0.0005
+      );
+      if (points.length < 4) return findElevation(lat, lon);
+
+      const x1 = Math.min(...points.map(p => p.lon));
+      const x2 = Math.max(...points.map(p => p.lon));
+      const y1 = Math.min(...points.map(p => p.lat));
+      const y2 = Math.max(...points.map(p => p.lat));
+
+      const Q11 = points.find(p => p.lat === y1 && p.lon === x1);
+      const Q21 = points.find(p => p.lat === y1 && p.lon === x2);
+      const Q12 = points.find(p => p.lat === y2 && p.lon === x1);
+      const Q22 = points.find(p => p.lat === y2 && p.lon === x2);
+
+      if (!(Q11 && Q21 && Q12 && Q22)) return findElevation(lat, lon);
+
+      const R1 = ((x2 - lon) / (x2 - x1)) * Q11.elevation + ((lon - x1) / (x2 - x1)) * Q21.elevation;
+      const R2 = ((x2 - lon) / (x2 - x1)) * Q12.elevation + ((lon - x1) / (x2 - x1)) * Q22.elevation;
+      const P = ((y2 - lat) / (y2 - y1)) * R1 + ((lat - y1) / (y2 - y1)) * R2;
+      return P;
     }
 
     function findElevation(lat, lon) {
