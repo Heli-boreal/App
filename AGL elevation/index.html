@@ -1,4 +1,4 @@
-<!-- VERSION : POINT 3 - Données hors ligne avec bouton de bascule labrie/lac rapide -->
+<!-- VERSION : POINT 3 (test avec fichier Lac Labrie) -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -19,7 +19,7 @@
       height: 100vh;
       transition: background 0.5s, color 0.5s;
     }
-    #themeToggle, #sourceToggle, #recordToggle, #areaToggle {
+    #themeToggle, #sourceToggle, #recordToggle {
       position: absolute;
       background: #fff;
       color: #000;
@@ -32,7 +32,6 @@
     }
     #themeToggle { top: 10px; left: 10px; }
     #sourceToggle { top: 10px; right: 10px; }
-    #areaToggle { top: 60px; left: 10px; }
     #recordToggle { bottom: 10px; left: 10px; }
     #recordToggle.recording { background: red; color: #fff; }
     #agl {
@@ -63,34 +62,18 @@
 <body>
   <button id="themeToggle">Mode clair</button>
   <button id="sourceToggle">Source: Hors ligne</button>
-  <button id="areaToggle">Zone: Lac Rapide</button>
   <button id="recordToggle">Enregistrer</button>
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
   <script>
-    let areaToggle = document.getElementById('areaToggle');
-    let currentArea = 'rapide'; // "rapide" ou "labrie"
-    let elevationData = null;
-
-    function loadElevationFile(name) {
-      fetch(name)
-        .then(res => res.json())
-        .then(data => {
-          elevationData = data;
-          console.log(`Données ${name} chargées : ${data.length} points.`);
-        });
-    }
-
-    areaToggle.addEventListener('click', () => {
-      currentArea = currentArea === 'rapide' ? 'labrie' : 'rapide';
-      let fileName = currentArea === 'rapide' ? 'elevation_data_full_rectangle.json' : 'elevation_lac_labrie_30m.json';
-      areaToggle.textContent = currentArea === 'rapide' ? 'Zone: Lac Rapide' : 'Zone: Lac Labrie';
-      loadElevationFile(fileName);
-    });
-
-    // Chargement initial
-    loadElevationFile('elevation_data_full_rectangle.json');
+    // Chargement du fichier Lac Labrie uniquement
+    fetch('elevation_lac_labrie_30m.json')
+      .then(res => res.json())
+      .then(data => {
+        window.elevationData = data;
+        console.log("Données Lac Labrie chargées", data.length);
+      });
   </script>
 </body>
 </html>
