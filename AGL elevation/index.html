@@ -132,8 +132,13 @@
       }
 
       if (useOffline) {
-        const ground = findElevation(predictedLat, predictedLon);
-        updateDisplay(lat, lon, alt, ground);
+        if (window.elevationData) {
+          const ground = findElevation(predictedLat, predictedLon);
+          updateDisplay(lat, lon, alt, ground);
+        } else {
+          console.warn("Les données d'élévation ne sont pas encore chargées.");
+          return;
+        }
       } else {
         fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon}`)
           .then(res => res.json())
