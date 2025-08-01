@@ -30,8 +30,20 @@
       cursor: pointer;
       z-index: 1000;
     }
+    #sourceToggle {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #fff;
+      color: #000;
+      border: none;
+      padding: 10px 15px;
+      font-size: 1em;
+      cursor: pointer;
+      z-index: 1000;
+    }
     #agl {
-      font-size: 4em;
+      font-size: 3em;
       color: #0f0;
     }
     #agl small {
@@ -57,6 +69,7 @@
 </head>
 <body>
   <button id="themeToggle">Mode clair</button>
+  <button id="sourceToggle">Source: En ligne</button>
   <div id="agl">AGL: <span id="agl-value">--</span> <small>m</small></div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
@@ -66,6 +79,46 @@
     let asl = null;
     let lat = null;
     let lon = null;
+    let useOffline = false;
+    let offlineData = null;
+
+    async function loadOfflineData() {
+      const res = await fetch("elevation_lac_labrie_30m.json");
+      const json = await res.json();
+      offlineData = json.data;
+    }
+
+    function getOfflineElevation(lat, lon) {
+      if (!offlineData) return null;
+      let closest = null;
+      let minDist = Infinity;
+      for (const pt of offlineData) {
+        const d = Math.hypot(lat - pt.lat, lon - pt.lon);
+        if (d < minDist) {
+          minDist = d;
+          closest = pt;
+        }
+      }
+      return closest?.elevation ?? null;
+    }
+
+    async function updateTerrain(lat, lon) {
+      if (useOffline) {
+        lastTerrain = getOfflineElevation(lat, lon);
+        lastTerrainTime = Date.now();
+        updateDisplay();
+      } else {
+        try {
+          const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`);
+          const json = await res.json();
+          lastTerrain = json.results[0].elevation;
+          lastTerrainTime = Date.now();
+          updateDisplay();
+        } catch (e) {
+          console.error("Erreur fetch SRTM:", e);
+        }
+      }
+    }
 
     function updateDisplay() {
       document.getElementById("asl").textContent = `GPS Altitude: ${asl?.toFixed(1) ?? '--'} m`;
@@ -79,27 +132,25 @@
     }
 
     function watchPosition() {
-      navigator.geolocation.watchPosition(async pos => {
+      navigator.geolocation.watchPosition(pos => {
         lat = pos.coords.latitude;
         lon = pos.coords.longitude;
         asl = pos.coords.altitude ?? null;
-
-        const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${lat},${lon}`);
-        const json = await res.json();
-        lastTerrain = json.results[0].elevation;
-        lastTerrainTime = Date.now();
-
+        updateTerrain(lat, lon);
       }, err => {
         console.error("Erreur GPS:", err);
       }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
     }
 
-    setInterval(updateDisplay, 1500);
-    watchPosition();
-
     document.getElementById('themeToggle').addEventListener('click', () => {
       document.body.classList.toggle('light-mode');
       themeToggle.textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
+    });
+
+    document.getElementById('sourceToggle').addEventListener('click', () => {
+      useOffline = !useOffline;
+      sourceToggle.textContent = `Source: ${useOffline ? 'Hors ligne' : 'En ligne'}`;
+      if (lat && lon) updateTerrain(lat, lon);
     });
 
     let wakeLock = null;
@@ -121,6 +172,10 @@
         requestWakeLock();
       }
     });
+
+    setInterval(updateDisplay, 1500);
+    loadOfflineData();
+    watchPosition();
     requestWakeLock();
   </script>
 </body>
