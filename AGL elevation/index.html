@@ -1,3 +1,4 @@
+<!-- VERSION : POINT 3 - Données hors ligne avec bouton de bascule labrie/lac rapide -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -18,7 +19,7 @@
       height: 100vh;
       transition: background 0.5s, color 0.5s;
     }
-    #themeToggle, #sourceToggle, #recordToggle {
+    #themeToggle, #sourceToggle, #recordToggle, #areaToggle {
       position: absolute;
       background: #fff;
       color: #000;
@@ -31,6 +32,7 @@
     }
     #themeToggle { top: 10px; left: 10px; }
     #sourceToggle { top: 10px; right: 10px; }
+    #areaToggle { top: 60px; left: 10px; }
     #recordToggle { bottom: 10px; left: 10px; }
     #recordToggle.recording { background: red; color: #fff; }
     #agl {
@@ -60,142 +62,35 @@
 </head>
 <body>
   <button id="themeToggle">Mode clair</button>
-  <button id="sourceToggle">Source: En ligne</button>
+  <button id="sourceToggle">Source: Hors ligne</button>
+  <button id="areaToggle">Zone: Lac Rapide</button>
   <button id="recordToggle">Enregistrer</button>
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
   <script>
-    let useOffline = false;
-    let recording = false;
-    let recordedPoints = [];
-    let asl = null;
-    let lat = null;
-    let lon = null;
-    let lastTerrain = null;
-    let lastTerrainTime = 0;
-    let lastLat = null;
-    let lastLon = null;
-    let lastTime = null;
+    let areaToggle = document.getElementById('areaToggle');
+    let currentArea = 'rapide'; // "rapide" ou "labrie"
+    let elevationData = null;
 
-    async function updateTerrain(predictedLat, predictedLon) {
-      if (useOffline) {
-        const res = await fetch("elevation_lac_labrie_30m.json");
-        const json = await res.json();
-        const pt = json.data.find(p => Math.abs(p.lat - predictedLat) < 0.0001 && Math.abs(p.lon - predictedLon) < 0.0001);
-        lastTerrain = pt ? pt.elevation : null;
-      } else {
-        try {
-          const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon}`);
-          const json = await res.json();
-          lastTerrain = json.results[0].elevation;
-        } catch (e) {
-          console.error("Erreur fetch SRTM:", e);
-          lastTerrain = null;
-        }
-      }
-      lastTerrainTime = Date.now();
+    function loadElevationFile(name) {
+      fetch(name)
+        .then(res => res.json())
+        .then(data => {
+          elevationData = data;
+          console.log(`Données ${name} chargées : ${data.length} points.`);
+        });
     }
 
-    function updateDisplay() {
-      document.getElementById("asl").textContent = `GPS Altitude: ${asl?.toFixed(1) ?? '--'} m`;
-      document.getElementById("terrain").textContent = `Sol: ${lastTerrain?.toFixed(1) ?? '--'} m`;
-      if (asl !== null && lastTerrain !== null) {
-        const agl = asl - lastTerrain;
-        document.getElementById("agl-value").textContent = agl.toFixed(1);
-        if (recording) {
-          recordedPoints.push({ time: new Date().toISOString(), lat, lon, alt: asl });
-        }
-      } else {
-        document.getElementById("agl-value").textContent = `--`;
-      }
-    }
-
-    function watchPosition() {
-      navigator.geolocation.watchPosition(pos => {
-        const newLat = pos.coords.latitude;
-        const newLon = pos.coords.longitude;
-        const newTime = Date.now();
-        asl = pos.coords.altitude ?? null;
-
-        if (lastLat !== null && lastLon !== null && lastTime !== null) {
-          const dt = (newTime - lastTime) / 1000;
-          const dLat = newLat - lastLat;
-          const dLon = newLon - lastLon;
-          const speedLat = dLat / dt;
-          const speedLon = dLon / dt;
-
-          const predictedLat = newLat + speedLat * 2;
-          const predictedLon = newLon + speedLon * 2;
-          updateTerrain(predictedLat, predictedLon);
-        } else {
-          updateTerrain(newLat, newLon);
-        }
-
-        lat = newLat;
-        lon = newLon;
-        lastLat = newLat;
-        lastLon = newLon;
-        lastTime = newTime;
-      }, err => {
-        console.error("Erreur GPS:", err);
-      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
-    }
-
-    document.getElementById('themeToggle').addEventListener('click', () => {
-      document.body.classList.toggle('light-mode');
-      document.getElementById('themeToggle').textContent = document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
+    areaToggle.addEventListener('click', () => {
+      currentArea = currentArea === 'rapide' ? 'labrie' : 'rapide';
+      let fileName = currentArea === 'rapide' ? 'elevation_data_full_rectangle.json' : 'elevation_lac_labrie_30m.json';
+      areaToggle.textContent = currentArea === 'rapide' ? 'Zone: Lac Rapide' : 'Zone: Lac Labrie';
+      loadElevationFile(fileName);
     });
 
-    document.getElementById('sourceToggle').addEventListener('click', () => {
-      useOffline = !useOffline;
-      document.getElementById('sourceToggle').textContent = `Source: ${useOffline ? 'Hors ligne' : 'En ligne'}`;
-      if (lat && lon) updateTerrain(lat, lon);
-    });
-
-    document.getElementById('recordToggle').addEventListener('click', () => {
-      recording = !recording;
-      const btn = document.getElementById('recordToggle');
-      btn.classList.toggle('recording', recording);
-      btn.textContent = recording ? 'Arrêter' : 'Enregistrer';
-      if (!recording && recordedPoints.length) {
-        const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>Tracé AGL</name>\n<Placemark><LineString><altitudeMode>absolute</altitudeMode><coordinates>\n` +
-          recordedPoints.map(p => `${p.lon},${p.lat},${p.alt}`).join(" ") +
-          `\n</coordinates></LineString></Placemark>\n</Document></kml>`;
-        const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'trace.kml';
-        a.click();
-        URL.revokeObjectURL(url);
-        recordedPoints = [];
-      }
-    });
-
-    let wakeLock = null;
-    async function requestWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          wakeLock.addEventListener('release', () => {
-            console.log('Wake Lock was released');
-          });
-          console.log('Wake Lock is active');
-        }
-      } catch (err) {
-        console.error(`${err.name}, ${err.message}`);
-      }
-    }
-    document.addEventListener("visibilitychange", () => {
-      if (wakeLock !== null && document.visibilityState === "visible") {
-        requestWakeLock();
-      }
-    });
-
-    setInterval(updateDisplay, 1500);
-    watchPosition();
-    requestWakeLock();
+    // Chargement initial
+    loadElevationFile('elevation_data_full_rectangle.json');
   </script>
 </body>
 </html>
