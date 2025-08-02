@@ -1,4 +1,3 @@
-<!-- VERSION : Point 6 avec anticipation 2s et interpolation bilinéaire + format amélioré -->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -115,11 +114,19 @@
         lastTerrain = bilinearInterpolation(predictedLat, predictedLon, offlineData);
       } else {
         try {
-          const res = await fetch(`https://api.opentopodata.org/v1/srtm90m?locations=${predictedLat},${predictedLon}`);
+          const latStr = predictedLat.toFixed(5);
+          const lonStr = predictedLon.toFixed(5);
+          const res = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${latStr},${lonStr}`);
           const json = await res.json();
-          lastTerrain = json.results[0].elevation;
+
+          if (json && json.results && json.results.length > 0) {
+            lastTerrain = json.results[0].elevation;
+          } else {
+            console.warn("Résultat inattendu de l'API Open-Elevation", json);
+            lastTerrain = null;
+          }
         } catch (e) {
-          console.error("Erreur fetch SRTM:", e);
+          console.error("Erreur fetch Open-Elevation:", e);
           lastTerrain = null;
         }
       }
