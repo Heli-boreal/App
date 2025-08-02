@@ -70,6 +70,13 @@
       font-size: 0.6em;
       color: #666;
     }
+    video#stayAwake {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -80,7 +87,9 @@
   <div id="asl">GPS Altitude: -- m</div>
   <div id="terrain">Sol: -- m</div>
   <div id="footer">Activer position =&gt; réglages/confidentialité/service de localisation/site web safari.</div>
-
+  <video id="stayAwake" autoplay loop muted playsinline>
+    <source src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDFtcDQyaXNvbTY4AAAAAG1vb3YAAABsbXZoZAAAAAB8J7kffCe5AAACAAADSAAAAAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAACGd0cmFrAAAAXHRraGQAAAADfCe5fCe5AAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHRraGQAAAADfCe5fCe5AAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHRraGQAAAADfCe5fCe5AAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" type="video/mp4">
+  </video>
   <script>
     let useOffline = true;
     let recording = false;
@@ -209,29 +218,8 @@
       }
     });
 
-    let wakeLock = null;
-    async function requestWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          wakeLock.addEventListener('release', () => {
-            console.log('Wake Lock was released');
-          });
-          console.log('Wake Lock is active');
-        }
-      } catch (err) {
-        console.error(`${err.name}, ${err.message}`);
-      }
-    }
-    document.addEventListener("visibilitychange", () => {
-      if (wakeLock !== null && document.visibilityState === "visible") {
-        requestWakeLock();
-      }
-    });
-
     setInterval(updateDisplay, 1500);
     watchPosition();
-    requestWakeLock();
   </script>
 </body>
 </html>
