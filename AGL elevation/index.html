@@ -138,7 +138,7 @@
       document.getElementById("terrain").textContent = `Sol: ${lastTerrain?.toFixed(1) ?? '--'} m`;
       if (asl !== null && lastTerrain !== null) {
         const agl = asl - lastTerrain;
-        document.getElementById("agl-value").textContent = agl.toFixed(1);
+        document.getElementById("agl-value").textContent = Math.round(agl);
         if (recording) {
           recordedPoints.push({ time: new Date().toISOString(), lat, lon, alt: asl });
         }
