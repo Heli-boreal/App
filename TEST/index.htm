@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Gestion de Stock Opérationnel</title>
+  <link rel="stylesheet" href="assets/css/default-ssc-theme.css" id="ssc-theme">
+  <link rel="stylesheet" href="assets/css/app.min.css">
+  <style>
+    input[type=checkbox] {
+      width: 20px;
+      height: 20px;
+      transform: scale(1.5);
+    }
+  </style>
+</head>
+<body onload="LoadFromQueryString();recalc_onclick('');">
+  <noscript style="color:#F15623;">
+    Cette page contient un formulaire dynamique. Activez JavaScript pour qu’il fonctionne correctement.
+  </noscript>
+
+  <form id="formc" name="formc" method="post" action="https://www.spreadsheetserver.com/server1/g/submit/submit.aspx" target="_self">
+    <input type="hidden" id="xl_spreadsheet" name="xl_spreadsheet" value="remote gear">
+    <input type="hidden" id="xl_client" name="xl_client" value="x10.5.8092.0">
+    <input type="hidden" name="xl_output" value="pdf">
+    <input type="hidden" name="xl_email_body" id="xl_email_body">
+
+    <!-- ICI ton contenu Excel converti vient, raccourci ici pour clarté -->
+    <!-- Exemple simplifié -->
+    <table>
+      <tr>
+        <td>Élingue 100-1</td>
+        <td><input type="checkbox" id="elingue_100_1" name="elingue_100_1"></td>
+      </tr>
+      <tr>
+        <td>Corde 25'</td>
+        <td><input type="text" id="corde_25" name="corde_25" value="0"></td>
+      </tr>
+      <!-- ... d'autres items ... -->
+    </table>
+
+    <button type="submit" onclick="prepareEmailBody()">Envoyer</button>
+  </form>
+
+  <script>
+    function prepareEmailBody() {
+      const inputs = document.querySelectorAll("input, textarea");
+      let corps = "Liste des items présents :\n\n";
+      for (let input of inputs) {
+        if (input.type === "checkbox" && input.checked) {
+          const label = input.closest("tr")?.querySelector("td")?.textContent?.trim() || "(sans nom)";
+          corps += `✓ ${label}\n`;
+        } else if (input.type === "text" && input.value.trim() !== "" && input.value.trim() !== "0") {
+          const label = input.closest("tr")?.querySelector("td")?.textContent?.trim() || "(quantité)";
+          corps += `• ${label} : ${input.value}\n`;
+        }
+      }
+      document.getElementById("xl_email_body").value = corps;
+    }
+  </script>
+
+  <script src="assets/js/app.min.js"></script>
+</body>
+</html>
