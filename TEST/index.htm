@@ -10,8 +10,55 @@
     <title>remote gear</title>
     <link rel="stylesheet" href="assets/css/default-ssc-theme.css" id="ssc-theme"/>
     <link rel="stylesheet" href="assets/css/app.min.css" />
-    </head>
-    <body onload="LoadFromQueryString();recalc_onclick('');" onunload=''>
+    
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      color: #0077cc;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0 20px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    input[type=checkbox] {
+      transform: scale(1.5);
+      margin-right: 10px;
+    }
+    button {
+      background-color: #0077cc;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 1em;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005fa3;
+    }
+  </style>
+
+</head>
+    <body>
+<div class="container">
+<h1>Formulaire de gestion</h1> onload="LoadFromQueryString();recalc_onclick('');" onunload=''>
         <noscript style='color:#F15623;'>
             This web page contains a live and functional spreadsheet created with <a href='https://www.spreadsheetconverter.com'>SpreadsheetConverter</a>. Please enable JavaScript in your web browser for the live calculations to work properly.
         </noscript>
@@ -1101,6 +1148,7 @@ BQAAAAAAAAAAAAAAK4PAABBcHAgR2VzdGlvbiBzdG9jayBvcGVyYXRpb25uZWxfdGVtcGxhdGVcRmlsb
       document.getElementById("xl_email_body").value = corps;
     }
   </script>
+</div>
 </body>
     <script type="text/javascript" src="assets/js/app.min.js" ></script>
 </html>
