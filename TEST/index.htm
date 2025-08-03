@@ -26,27 +26,19 @@
     <input type="hidden" name="xl_output" value="pdf">
     <input type="hidden" name="xl_email_body" id="xl_email_body">
 
-    <!-- ICI ton contenu Excel converti vient, raccourci ici pour clarté -->
-    <!-- Exemple simplifié -->
-    <table>
-      <tr>
-        <td>Élingue 100-1</td>
-        <td><input type="checkbox" id="elingue_100_1" name="elingue_100_1"></td>
-      </tr>
-      <tr>
-        <td>Corde 25'</td>
-        <td><input type="text" id="corde_25" name="corde_25" value="0"></td>
-      </tr>
-      <!-- ... d'autres items ... -->
-    </table>
+    <!-- CONTENU SPREADSHEETCONVERTER (NE PAS TOUCHER) -->
+    <!-- Le contenu réel converti d'Excel sera ici -->
 
-    <button type="submit" onclick="prepareEmailBody()">Envoyer</button>
+    <!-- Le bouton submit d'origine, modifié pour appeler notre fonction -->
+    <button class='btn button-submit' onclick='prepareEmailBody()'>Envoyer</button>
   </form>
 
+  <!-- Script pour créer dynamiquement le corps du courriel -->
   <script>
     function prepareEmailBody() {
-      const inputs = document.querySelectorAll("input, textarea");
       let corps = "Liste des items présents :\n\n";
+      const inputs = document.querySelectorAll("input, textarea");
+
       for (let input of inputs) {
         if (input.type === "checkbox" && input.checked) {
           const label = input.closest("tr")?.querySelector("td")?.textContent?.trim() || "(sans nom)";
@@ -56,10 +48,12 @@
           corps += `• ${label} : ${input.value}\n`;
         }
       }
+
       document.getElementById("xl_email_body").value = corps;
     }
   </script>
 
+  <!-- Script SpreadsheetConverter original -->
   <script src="assets/js/app.min.js"></script>
 </body>
 </html>
