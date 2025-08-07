@@ -101,7 +101,7 @@
     let recordedPoints = [];
     let asl = null, lat = null, lon = null;
     let lastTerrain = null, lastLat = null, lastLon = null, lastTime = null;
-    let slingOffset = 50;
+    let slingOffset = 0;
 
     async function loadOfflineData() {
       const res = await fetch("elevation_lac_labrie_30m.json");
