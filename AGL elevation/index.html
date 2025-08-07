@@ -65,7 +65,7 @@
       color: #000;
     }
     .light-mode #asl-terrain {
-      color: #000; /* corrigé ici */
+      color: #000;
     }
     #footer {
       position: absolute;
@@ -85,10 +85,157 @@
     <option value="35">35 m</option>
     <option value="40">40 m</option>
     <option value="45">45 m</option>
-    <option value="50">50 m</option>
+    <option value="50" selected>50 m</option>
     <option value="55">55 m</option>
     <option value="60">60 m</option>
   </select>
 
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
-  <div id="asl-terrain">GPS Altitude:
+  <div id="asl-terrain">GPS Altitude: -- m | Sol: -- m</div>
+  <div id="footer">Activer position =&gt; réglages/confidentialité/service de localisation/site web safari.</div>
+
+  <script>
+    let useOffline = true;
+    let recording = false;
+    let recordedPoints = [];
+    let asl = null, lat = null, lon = null;
+    let lastTerrain = null, lastLat = null, lastLon = null, lastTime = null;
+    let slingOffset = 50;
+
+    async function loadOfflineData() {
+      const res = await fetch("elevation_lac_labrie_30m.json");
+      return (await res.json()).data;
+    }
+
+    let offlineData = [];
+    loadOfflineData().then(data => offlineData = data);
+
+    function bilinearInterpolation(x, y, data) {
+      const close = data.filter(p => Math.abs(p.lat - x) <= 0.0005 && Math.abs(p.lon - y) <= 0.0005);
+      if (close.length < 4) return null;
+      close.sort((a, b) => Math.hypot(a.lat - x, a.lon - y) - Math.hypot(b.lat - x, b.lon - y));
+      return close[0].elevation;
+    }
+
+    async function updateTerrain(predictedLat, predictedLon) {
+      if (useOffline) {
+        lastTerrain = bilinearInterpolation(predictedLat, predictedLon, offlineData);
+      } else {
+        try {
+          const res = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${predictedLat.toFixed(5)},${predictedLon.toFixed(5)}`);
+          const json = await res.json();
+          lastTerrain = json?.results?.[0]?.elevation ?? null;
+        } catch (e) {
+          console.error("Erreur API:", e);
+          lastTerrain = null;
+        }
+      }
+    }
+
+    function updateDisplay() {
+      const terrainText = lastTerrain?.toFixed(1) ?? '--';
+      const aslText = asl?.toFixed(1) ?? '--';
+      document.getElementById("asl-terrain").textContent = `GPS Altitude: ${aslText} m | Sol: ${terrainText} m`;
+
+      if (asl !== null && lastTerrain !== null) {
+        const aglRaw = asl - lastTerrain;
+        const aglCorrected = Math.max(aglRaw - slingOffset, 0);
+        document.getElementById("agl-value").textContent = Math.round(aglCorrected);
+        if (recording) {
+          recordedPoints.push({ time: new Date().toISOString(), lat, lon, agl: Math.round(aglCorrected) });
+        }
+      } else {
+        document.getElementById("agl-value").textContent = '--';
+      }
+    }
+
+    function watchPosition() {
+      navigator.geolocation.watchPosition(pos => {
+        const newLat = pos.coords.latitude;
+        const newLon = pos.coords.longitude;
+        const newTime = Date.now();
+        asl = pos.coords.altitude ?? null;
+
+        if (lastLat !== null && lastLon !== null && lastTime !== null) {
+          const dt = (newTime - lastTime) / 1000;
+          const predictedLat = newLat + (newLat - lastLat) / dt * 2;
+          const predictedLon = newLon + (newLon - lastLon) / dt * 2;
+          updateTerrain(predictedLat, predictedLon);
+        } else {
+          updateTerrain(newLat, newLon);
+        }
+
+        lat = newLat;
+        lon = newLon;
+        lastLat = newLat;
+        lastLon = newLon;
+        lastTime = newTime;
+      }, err => {
+        console.error("Erreur GPS:", err);
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+    }
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      document.body.classList.toggle('light-mode');
+      document.getElementById('themeToggle').textContent =
+        document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
+    });
+
+    document.getElementById('sourceToggle').addEventListener('click', () => {
+      useOffline = !useOffline;
+      document.getElementById('sourceToggle').textContent =
+        `Source: ${useOffline ? 'Hors ligne' : 'En ligne'}`;
+      if (lat && lon) updateTerrain(lat, lon);
+    });
+
+    document.getElementById('slingSelect').addEventListener('change', e => {
+      slingOffset = parseInt(e.target.value, 10);
+    });
+
+    document.getElementById('recordToggle').addEventListener('click', () => {
+      recording = !recording;
+      const btn = document.getElementById('recordToggle');
+      btn.classList.toggle('recording', recording);
+      btn.textContent = recording ? 'Arrêter' : 'Enregistrer';
+      if (!recording && recordedPoints.length) {
+        const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>Tracé AGL corrigé</name>\n<Placemark><LineString><altitudeMode>absolute</altitudeMode><coordinates>\n` +
+          recordedPoints.map(p => `${p.lon},${p.lat},${p.agl}`).join(" ") +
+          `\n</coordinates></LineString></Placemark>\n</Document></kml>`;
+        const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'trace_agl_corrige.kml';
+        a.click();
+        URL.revokeObjectURL(url);
+        recordedPoints = [];
+      }
+    });
+
+    let wakeLock = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.onrelease = () => {
+            console.log('Wake Lock released');
+          };
+          console.log('Wake Lock is active');
+        }
+      } catch (err) {
+        console.error(err.name, err.message);
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (wakeLock !== null && document.visibilityState === "visible") {
+        requestWakeLock();
+      }
+    });
+
+    setInterval(updateDisplay, 1500);
+    watchPosition();
+    requestWakeLock();
+  </script>
+</body>
+</html>
