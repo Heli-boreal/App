@@ -18,7 +18,7 @@
       height: 100vh;
       transition: background 0.5s, color 0.5s;
     }
-    #themeToggle, #recordToggle, #sourceToggle, #elingueSelect {
+    #themeToggle, #recordToggle, #sourceToggle, #slingSelect {
       position: absolute;
       background: #fff;
       color: #000;
@@ -32,7 +32,8 @@
     #themeToggle { top: 10px; left: 10px; }
     #sourceToggle { top: 10px; right: 10px; }
     #recordToggle { bottom: 10px; left: 10px; }
-    #elingueSelect { bottom: 10px; right: 10px; }
+    #slingSelect { bottom: 10px; right: 10px; }
+
     #recordToggle.recording { background: red; color: #fff; }
 
     #agl {
@@ -64,7 +65,7 @@
       color: #000;
     }
     .light-mode #asl-terrain {
-      color: #fff; /* anciennement bleu, maintenant blanc */
+      color: #000; /* corrigé ici */
     }
     #footer {
       position: absolute;
@@ -78,159 +79,16 @@
   <button id="themeToggle">Mode clair</button>
   <button id="sourceToggle">Source: Hors ligne</button>
   <button id="recordToggle">Enregistrer</button>
-  <select id="elingueSelect" title="Réduction élingue (m)">
-    ${[...Array(36).keys()].map(i => `<option value="${i + 25}">${i + 25} m</option>`).join('')}
+  <select id="slingSelect" title="Réduction sling (m)">
+    <option value="25">25 m</option>
+    <option value="30">30 m</option>
+    <option value="35">35 m</option>
+    <option value="40">40 m</option>
+    <option value="45">45 m</option>
+    <option value="50">50 m</option>
+    <option value="55">55 m</option>
+    <option value="60">60 m</option>
   </select>
 
   <div id="agl"><small>AGL:</small> <span id="agl-value">--</span> <small>m</small></div>
-  <div id="asl-terrain">GPS Altitude: -- m | Sol: -- m</div>
-  <div id="footer">Activer position =&gt; réglages/confidentialité/service de localisation/site web safari.</div>
-
-  <script>
-    let useOffline = true;
-    let recording = false;
-    let recordedPoints = [];
-    let asl = null, lat = null, lon = null;
-    let lastTerrain = null, lastTerrainTime = 0;
-    let lastLat = null, lastLon = null, lastTime = null;
-    let elingueOffset = 25;
-
-    async function loadOfflineData() {
-      const res = await fetch("elevation_lac_labrie_30m.json");
-      return (await res.json()).data;
-    }
-
-    let offlineData = [];
-    loadOfflineData().then(data => offlineData = data);
-
-    function bilinearInterpolation(x, y, data) {
-      const closest = data.filter(p => Math.abs(p.lat - x) <= 0.0005 && Math.abs(p.lon - y) <= 0.0005);
-      if (closest.length < 4) return null;
-      closest.sort((a, b) => Math.hypot(a.lat - x, a.lon - y) - Math.hypot(b.lat - x, b.lon - y));
-      return closest[0].elevation;
-    }
-
-    async function updateTerrain(predictedLat, predictedLon) {
-      if (useOffline) {
-        lastTerrain = bilinearInterpolation(predictedLat, predictedLon, offlineData);
-      } else {
-        try {
-          const res = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${predictedLat.toFixed(5)},${predictedLon.toFixed(5)}`);
-          const json = await res.json();
-          lastTerrain = json?.results?.[0]?.elevation ?? null;
-        } catch (e) {
-          console.error("Erreur fetch Open-Elevation:", e);
-          lastTerrain = null;
-        }
-      }
-      lastTerrainTime = Date.now();
-    }
-
-    function updateDisplay() {
-      const terrainText = lastTerrain?.toFixed(1) ?? '--';
-      const aslText = asl?.toFixed(1) ?? '--';
-      document.getElementById("asl-terrain").textContent = `GPS Altitude: ${aslText} m | Sol: ${terrainText} m`;
-
-      if (asl !== null && lastTerrain !== null) {
-        const aglRaw = asl - lastTerrain;
-        const aglCorrected = Math.max(aglRaw - elingueOffset, 0);
-        document.getElementById("agl-value").textContent = Math.round(aglCorrected);
-        if (recording) {
-          recordedPoints.push({ time: new Date().toISOString(), lat, lon, agl: Math.round(aglCorrected) });
-        }
-      } else {
-        document.getElementById("agl-value").textContent = '--';
-      }
-    }
-
-    function watchPosition() {
-      navigator.geolocation.watchPosition(pos => {
-        const newLat = pos.coords.latitude;
-        const newLon = pos.coords.longitude;
-        const newTime = Date.now();
-        asl = pos.coords.altitude ?? null;
-
-        if (lastLat !== null && lastLon !== null && lastTime !== null) {
-          const dt = (newTime - lastTime) / 1000;
-          const speedLat = (newLat - lastLat) / dt;
-          const speedLon = (newLon - lastLon) / dt;
-          const predictedLat = newLat + speedLat * 2;
-          const predictedLon = newLon + speedLon * 2;
-          updateTerrain(predictedLat, predictedLon);
-        } else {
-          updateTerrain(newLat, newLon);
-        }
-
-        lat = newLat;
-        lon = newLon;
-        lastLat = newLat;
-        lastLon = newLon;
-        lastTime = newTime;
-      }, err => {
-        console.error("Erreur GPS:", err);
-      }, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
-    }
-
-    document.getElementById('themeToggle').addEventListener('click', () => {
-      document.body.classList.toggle('light-mode');
-      document.getElementById('themeToggle').textContent =
-        document.body.classList.contains('light-mode') ? 'Mode sombre' : 'Mode clair';
-    });
-
-    document.getElementById('sourceToggle').addEventListener('click', () => {
-      useOffline = !useOffline;
-      document.getElementById('sourceToggle').textContent =
-        `Source: ${useOffline ? 'Hors ligne' : 'En ligne'}`;
-      if (lat && lon) updateTerrain(lat, lon);
-    });
-
-    document.getElementById('elingueSelect').addEventListener('change', e => {
-      elingueOffset = parseInt(e.target.value, 10);
-    });
-
-    document.getElementById('recordToggle').addEventListener('click', () => {
-      recording = !recording;
-      const btn = document.getElementById('recordToggle');
-      btn.classList.toggle('recording', recording);
-      btn.textContent = recording ? 'Arrêter' : 'Enregistrer';
-      if (!recording && recordedPoints.length) {
-        const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<name>Tracé AGL corrigé</name>\n<Placemark><LineString><altitudeMode>absolute</altitudeMode><coordinates>\n` +
-          recordedPoints.map(p => `${p.lon},${p.lat},${p.agl}`).join(" ") +
-          `\n</coordinates></LineString></Placemark>\n</Document></kml>`;
-        const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'trace_agl_corrige.kml';
-        a.click();
-        URL.revokeObjectURL(url);
-        recordedPoints = [];
-      }
-    });
-
-    let wakeLock = null;
-    async function requestWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          wakeLock.addEventListener('release', () => {
-            console.log('Wake Lock was released');
-          });
-          console.log('Wake Lock is active');
-        }
-      } catch (err) {
-        console.error(`${err.name}, ${err.message}`);
-      }
-    }
-    document.addEventListener("visibilitychange", () => {
-      if (wakeLock !== null && document.visibilityState === "visible") {
-        requestWakeLock();
-      }
-    });
-
-    setInterval(updateDisplay, 1500);
-    watchPosition();
-    requestWakeLock();
-  </script>
-</body>
-</html>
+  <div id="asl-terrain">GPS Altitude:
