@@ -139,7 +139,7 @@
 
       if (asl !== null && lastTerrain !== null) {
         const aglRaw = asl - lastTerrain;
-        const aglCorrected = Math.max(aglRaw - slingOffset, 0);
+        const aglCorrected = aglRaw - slingOffset;
         document.getElementById("agl-value").textContent = Math.round(aglCorrected);
         if (recording) {
           recordedPoints.push({ time: new Date().toISOString(), lat, lon, agl: Math.round(aglCorrected) });
